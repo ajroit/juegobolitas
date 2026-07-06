@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mundial de Canicas — Boceto Animado</title>
+<style>
+  :root{
+    --paper:#f7f5ee; --ink:#2b3ab0; --ink-soft:#5b67c9;
+    --font-hand:'Segoe Print','Bradley Hand','Comic Sans MS',cursive;
+    --font-ui:'Trebuchet MS',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#d9d5c9;}
+  body{display:flex;align-items:center;justify-content:center;font-family:var(--font-ui);overflow:hidden;}
+  #stage{position:relative;width:min(100vw, calc(100vh * (1280/720)));aspect-ratio:1280/720;
+    box-shadow:0 12px 40px rgba(30,30,60,.35);background:var(--paper);}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+
+  #scoreboard{
+    position:absolute;top:2.2%;left:1.4%;background:#fffdf6;border:2px solid var(--ink);
+    padding:9px 13px 10px;min-width:225px;max-width:275px;
+    box-shadow:3px 4px 0 rgba(43,58,176,.25);transform:rotate(-1.2deg);
+    font-family:var(--font-hand);color:var(--ink);z-index:5;
+  }
+  #scoreboard::before{content:"";position:absolute;top:-12px;left:50%;transform:translateX(-50%) rotate(2deg);
+    width:70px;height:20px;background:rgba(255,225,120,.75);border:1px solid rgba(160,140,60,.4);}
+  #phaseTag{font-size:11px;font-family:var(--font-ui);color:#7a4a12;letter-spacing:.4px;}
+  #scoreboard h2{font-size:15px;letter-spacing:.4px;margin:1px 0 2px;}
+  #scoreboard .rule{font-size:11px;color:#7a4a12;margin-bottom:2px;font-family:var(--font-ui);}
+  #scnTag{font-size:11px;color:#8848b0;margin-bottom:5px;font-family:var(--font-ui);}
+  .teamRow{display:flex;align-items:center;gap:7px;font-size:13px;line-height:1.55;}
+  .dot{width:13px;height:13px;border-radius:50%;border:2px solid var(--ink);flex:none;}
+  .teamRow.qualified{opacity:.55;}
+  #simBtn{margin-top:7px;width:100%;font-family:var(--font-hand);font-size:12.5px;color:#fffdf6;
+    background:var(--ink);border:none;padding:5px 8px;cursor:pointer;box-shadow:2px 2px 0 rgba(43,58,176,.3);}
+  #simBtn:hover{transform:translateY(-1px);}
+
+  #log{
+    position:absolute;bottom:2.4%;left:1.4%;z-index:5;background:#fffdf6;
+    border:2px solid var(--ink);padding:7px 11px;max-width:295px;
+    font-family:var(--font-ui);font-size:11px;color:#333;
+    box-shadow:3px 4px 0 rgba(43,58,176,.2);transform:rotate(.8deg);
+  }
+  #log b{font-family:var(--font-hand);color:var(--ink);font-size:12.5px;}
+  #logItems{max-height:96px;overflow-y:auto;margin-top:3px;line-height:1.5;}
+
+  #banner{
+    position:absolute;top:30%;left:50%;transform:translate(-50%,-50%) rotate(-1deg) scale(.8);
+    background:#fffdf6;border:3px solid var(--ink);padding:13px 32px;
+    font-family:var(--font-hand);font-size:clamp(17px,2.7vw,29px);color:var(--ink);
+    box-shadow:5px 6px 0 rgba(43,58,176,.25);opacity:0;pointer-events:none;
+    transition:opacity .25s, transform .25s;z-index:6;white-space:nowrap;
+  }
+  #banner.show{opacity:1;transform:translate(-50%,-50%) rotate(-1deg) scale(1);}
+
+  .overlay{position:absolute;inset:0;z-index:10;background:rgba(247,245,238,.94);
+    display:flex;align-items:center;justify-content:center;}
+  .card{
+    font-family:var(--font-hand);color:var(--ink);background:#fffdf6;border:3px solid var(--ink);
+    box-shadow:6px 7px 0 rgba(43,58,176,.22);padding:22px 30px;max-width:760px;max-height:92%;
+    overflow-y:auto;text-align:center;transform:rotate(-.6deg);
+  }
+  .card h1{font-size:clamp(20px,3vw,30px);margin-bottom:4px;}
+  .card p{font-family:var(--font-ui);font-size:13.5px;color:#444;margin-bottom:14px;}
+  .card .body{font-family:var(--font-ui);font-size:13.5px;color:#333;margin-bottom:16px;line-height:1.7;}
+  .card .body .dot{display:inline-block;vertical-align:-2px;width:12px;height:12px;margin-right:3px;}
+  button.big{font-family:var(--font-hand);font-size:17px;color:#fffdf6;background:var(--ink);
+    border:none;padding:10px 28px;cursor:pointer;box-shadow:4px 4px 0 rgba(43,58,176,.3);}
+  button.big:hover{transform:translateY(-1px);}
+  #hint{font-family:var(--font-ui);font-size:12px;color:#777;margin-top:12px;}
+  .hidden{display:none !important;}
+  #groupsGrid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:6px 14px;text-align:left;
+    font-family:var(--font-ui);font-size:11.5px;color:#444;margin-bottom:16px;
+  }
+  #groupsGrid b{font-family:var(--font-hand);color:var(--ink);}
+  table.mini{margin:0 auto 4px;border-collapse:collapse;font-family:var(--font-ui);font-size:12.5px;color:#333;}
+  table.mini td{padding:1px 9px;text-align:left;}
+
+  /* ---------- Marcador colapsable ---------- */
+  #sbHead{cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none;}
+  #sbCaret{font-size:12px;transition:transform .2s;color:var(--ink-soft);}
+  #scoreboard.collapsed #sbBody{display:none;}
+  #scoreboard.collapsed #sbCaret{transform:rotate(-90deg);}
+  #sbMini{display:none;align-items:center;gap:2px 7px;flex-wrap:wrap;margin-top:3px;font-size:11.5px;}
+  #scoreboard.collapsed #sbMini{display:flex;}
+  #sbMini .mi{display:inline-flex;align-items:center;gap:3px;}
+  #sbMini .mi.q{opacity:.5;}
+  #sbMini .dot{width:11px;height:11px;}
+  #logToggle{display:none;}
+
+  /* ---------- MÓVIL: carteles compactos y discretos ---------- */
+  @media (max-width:820px), (max-height:520px){
+    #scoreboard{padding:4px 8px 5px;min-width:0;max-width:185px;border-width:1.5px;
+      box-shadow:2px 2px 0 rgba(43,58,176,.2);opacity:.94;transform:rotate(0deg);}
+    #scoreboard::before{display:none;}
+    #phaseTag{font-size:8px;}
+    #scoreboard h2{font-size:11px;margin:0;}
+    #scoreboard .rule{display:none;}
+    #scnTag{font-size:8.5px;margin-bottom:3px;}
+    .teamRow{font-size:9.5px;gap:4px;line-height:1.4;}
+    .teamRow .dot{width:9px;height:9px;border-width:1.5px;}
+    #sbMini{font-size:10px;gap:1px 6px;}
+    #sbMini .dot{width:10px;height:10px;border-width:1.5px;}
+    #simBtn{font-size:9.5px;padding:3px 6px;margin-top:4px;box-shadow:1px 1px 0 rgba(43,58,176,.3);}
+
+    #log{display:none;bottom:calc(2.4% + 30px);max-width:220px;font-size:9px;padding:5px 8px;
+      border-width:1.5px;box-shadow:2px 2px 0 rgba(43,58,176,.15);transform:none;}
+    #log.show{display:block;}
+    #log b{font-size:10px;}
+    #logItems{max-height:70px;}
+    #logToggle{display:block;position:absolute;bottom:2.4%;left:1.4%;z-index:6;
+      background:rgba(255,253,246,.9);border:1.5px solid var(--ink);color:var(--ink);
+      font-size:12px;padding:2px 8px;cursor:pointer;}
+
+    #banner{top:13%;font-size:12.5px;padding:6px 14px;border-width:2px;
+      box-shadow:2px 3px 0 rgba(43,58,176,.2);background:rgba(255,253,246,.93);}
+
+    .card{padding:12px 15px;max-width:94%;border-width:2px;}
+    .card h1{font-size:16px;}
+    .card p,.card .body{font-size:10.5px;line-height:1.5;margin-bottom:10px;}
+    .card .body .dot{width:9px;height:9px;}
+    #groupsGrid{grid-template-columns:repeat(2,1fr);font-size:8.5px;gap:2px 8px;margin-bottom:10px;}
+    button.big{font-size:13px;padding:7px 18px;box-shadow:2px 2px 0 rgba(43,58,176,.3);}
+    #hint{font-size:9px;margin-top:8px;}
+    table.mini{font-size:9.5px;}
+    table.mini td{padding:0 5px;}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="scoreboard">
+    <div id="phaseTag">—</div>
+    <div id="sbHead">
+      <h2 id="sessionTitle">&#9917; MUNDIAL</h2>
+      <span id="sbCaret">&#9662;</span>
+    </div>
+    <div id="sbMini"></div>
+    <div id="sbBody">
+      <div class="rule" id="ruleTxt"></div>
+      <div id="scnTag"></div>
+      <div id="rows"></div>
+      <button id="simBtn">&#9193; Simular esta ronda</button>
+    </div>
+  </div>
+
+  <div id="log"><b>&#128221; Resultados</b><div id="logItems">—</div></div>
+  <button id="logToggle">&#128221;</button>
+
+  <div id="banner"></div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="card">
+      <h1>&#127942; Mundial de Canicas 2026</h1>
+      <p>48 selecciones, 12 grupos reales, y <b>5 escenarios distintos</b> que van rotando:
+      molinetes, bumpers, pistones, péndulos y agujeros. En cada grupo clasifican los
+      <b>3 primeros en llegar a 3 goles</b> (el tiempo del 3º define a los <b>8 mejores terceros</b>).
+      Después: 16avos, octavos, cuartos, semifinales y la gran FINAL.</p>
+      <div id="groupsGrid"></div>
+      <button class="big" id="startBtn">Comenzar Mundial</button>
+      <div id="hint">&#128433;&#65039; Mové el mouse para controlar al arquero. Botón "Simular" para saltear una ronda.</div>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="midOverlay">
+    <div class="card">
+      <h1 id="midTitle"></h1>
+      <div class="body" id="midBody"></div>
+      <button class="big" id="midBtn">Continuar &#9654;</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="endOverlay">
+    <div class="card">
+      <h1 id="endTitle"></h1>
+      <div class="body" id="endBody"></div>
+      <button class="big" id="restartBtn">Jugar otro Mundial</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+"use strict";
+const { Engine, Bodies, Body, Composite, Constraint, Events } = Matter;
+
+/* ============================== CONFIG ============================== */
+const W = 1280, H = 720;
+const GOALS_GROUP = 3;
+const GOALS_KO = 3;
+const MAX_BALLS = 26;
+const SPAWN_MS = 750;
+const BALL_R = 12;
+const BALL_REST = 0.82;      // (a) MÁS REBOTE en las pelotas
+const MAX_SPEED = 27;        // tope de velocidad para que no exploten
+
+/* ================= EQUIPOS Y GRUPOS REALES (Mundial 2026) ================= */
+const F = (t,s,e)=>({t,s,e});
+const GROUPS_DEF = [
+ {letter:'A', teams:[
+   {name:'México',          flag:F('v',['#006847','#ffffff','#CE1126'])},
+   {name:'Sudáfrica',       flag:F('h',['#DE3831','#ffffff','#007A4D'],{k:'wedge',c:'#001489'})},
+   {name:'Corea del Sur',   flag:F('s',['#ffffff'],{k:'circle',c:'#CD2E3A'})},
+   {name:'República Checa', flag:F('h',['#ffffff','#D7141A'],{k:'wedge',c:'#11457E'})}]},
+ {letter:'B', teams:[
+   {name:'Suiza',           flag:F('s',['#DA291C'],{k:'cross',c:'#ffffff'})},
+   {name:'Canadá',          flag:F('v',['#FF0000','#ffffff','#FF0000'],{k:'circle',c:'#FF0000'})},
+   {name:'Bosnia',          flag:F('s',['#002F6C'],{k:'wedge',c:'#FECB00'})},
+   {name:'Qatar',           flag:F('v',['#ffffff','#8A1538'])}]},
+ {letter:'C', teams:[
+   {name:'Brasil',          flag:F('s',['#009C3B'],{k:'brasil'})},
+   {name:'Marruecos',       flag:F('s',['#C1272D'],{k:'circle',c:'#006233'})},
+   {name:'Escocia',         flag:F('s',['#0065BF'],{k:'cross',c:'#ffffff'})},
+   {name:'Haití',           flag:F('h',['#00209F','#D21034'])}]},
+ {letter:'D', teams:[
+   {name:'Estados Unidos',  flag:F('h',['#B22234','#ffffff','#B22234'],{k:'wedge',c:'#3C3B6E'})},
+   {name:'Australia',       flag:F('s',['#00008B'],{k:'circle',c:'#ffffff'})},
+   {name:'Paraguay',        flag:F('h',['#D52B1E','#ffffff','#0038A8'])},
+   {name:'Turquía',         flag:F('s',['#E30A17'],{k:'circle',c:'#ffffff'})}]},
+ {letter:'E', teams:[
+   {name:'Alemania',        flag:F('h',['#111111','#DD0000','#FFCE00'])},
+   {name:'Costa de Marfil', flag:F('v',['#FF8200','#ffffff','#009A44'])},
+   {name:'Ecuador',         flag:F('h',['#FFDD00','#034EA2','#ED1C24'])},
+   {name:'Curazao',         flag:F('s',['#002B7F'],{k:'circle',c:'#F9E814'})}]},
+ {letter:'F', teams:[
+   {name:'Países Bajos',    flag:F('h',['#AE1C28','#ffffff','#21468B'])},
+   {name:'Japón',           flag:F('s',['#ffffff'],{k:'circle',c:'#BC002D'})},
+   {name:'Suecia',          flag:F('s',['#006AA7'],{k:'cross',c:'#FECC02'})},
+   {name:'Túnez',           flag:F('s',['#E70013'],{k:'circle',c:'#ffffff'})}]},
+ {letter:'G', teams:[
+   {name:'Bélgica',         flag:F('v',['#111111','#FAE042','#ED2939'])},
+   {name:'Egipto',          flag:F('h',['#CE1126','#ffffff','#111111'],{k:'circle',c:'#C09300'})},
+   {name:'Irán',            flag:F('h',['#239F40','#ffffff','#DA0000'])},
+   {name:'Nueva Zelanda',   flag:F('s',['#00247D'],{k:'circle',c:'#CC142B'})}]},
+ {letter:'H', teams:[
+   {name:'España',          flag:F('h',['#AA151B','#F1BF00','#AA151B'])},
+   {name:'Cabo Verde',      flag:F('s',['#003893'],{k:'circle',c:'#ffffff'})},
+   {name:'Uruguay',         flag:F('h',['#ffffff','#0038A8','#ffffff'],{k:'sun'})},
+   {name:'Arabia Saudita',  flag:F('s',['#165B33'],{k:'circle',c:'#ffffff'})}]},
+ {letter:'I', teams:[
+   {name:'Francia',         flag:F('v',['#0055A4','#ffffff','#EF4135'])},
+   {name:'Noruega',         flag:F('s',['#BA0C2F'],{k:'cross',c:'#00205B'})},
+   {name:'Senegal',         flag:F('v',['#00853F','#FDEF42','#E31B23'],{k:'circle',c:'#00853F'})},
+   {name:'Irak',            flag:F('h',['#CE1126','#ffffff','#111111'])}]},
+ {letter:'J', teams:[
+   {name:'Argentina',       flag:F('h',['#74ACDF','#ffffff','#74ACDF'],{k:'sun'})},
+   {name:'Austria',         flag:F('h',['#ED2939','#ffffff','#ED2939'])},
+   {name:'Argelia',         flag:F('v',['#006233','#ffffff'],{k:'circle',c:'#D21034'})},
+   {name:'Jordania',        flag:F('h',['#111111','#ffffff','#007A3D'],{k:'wedge',c:'#CE1126'})}]},
+ {letter:'K', teams:[
+   {name:'Colombia',        flag:F('h',['#FCD116','#003893','#CE1126'])},
+   {name:'Portugal',        flag:F('v',['#006600','#FF0000'],{k:'circle',c:'#FFE900'})},
+   {name:'RD Congo',        flag:F('s',['#007FFF'],{k:'circle',c:'#F7D618'})},
+   {name:'Uzbekistán',      flag:F('h',['#0099B5','#ffffff','#1EB53A'])}]},
+ {letter:'L', teams:[
+   {name:'Inglaterra',      flag:F('s',['#ffffff'],{k:'cross',c:'#CE1126'})},
+   {name:'Croacia',         flag:F('h',['#FF0000','#ffffff','#171796'],{k:'circle',c:'#FF0000'})},
+   {name:'Ghana',           flag:F('h',['#CE1126','#FCD116','#006B3F'],{k:'circle',c:'#111111'})},
+   {name:'Panamá',          flag:F('v',['#ffffff','#D21034'],{k:'circle',c:'#005293'})}]},
+];
+
+function flagCSS(f){
+  let base;
+  if(f.t==='s'){ base = "linear-gradient(0deg," + f.s[0] + "," + f.s[0] + ")"; }
+  else{
+    const dir = f.t==='h' ? '180deg' : '90deg';
+    const n = f.s.length;
+    const stops = f.s.map((c,i)=> c + " " + Math.round(100*i/n) + "% " + Math.round(100*(i+1)/n) + "%").join(",");
+    base = "linear-gradient(" + dir + "," + stops + ")";
+  }
+  if(f.e){
+    if(f.e.k==='sun')    return "radial-gradient(circle,#F6B40E 0 26%,rgba(0,0,0,0) 27%)," + base;
+    if(f.e.k==='brasil') return "radial-gradient(circle,#002776 0 18%,#FEDF00 19% 42%,rgba(0,0,0,0) 43%)," + base;
+    if(f.e.k==='circle') return "radial-gradient(circle," + f.e.c + " 0 28%,rgba(0,0,0,0) 29%)," + base;
+    if(f.e.k==='cross')  return "linear-gradient(90deg,rgba(0,0,0,0) 40%," + f.e.c + " 40% 60%,rgba(0,0,0,0) 60%),linear-gradient(0deg,rgba(0,0,0,0) 40%," + f.e.c + " 40% 60%,rgba(0,0,0,0) 60%)," + base;
+  }
+  return base;
+}
+function teamColor(t){ return (t.flag.e && t.flag.e.c) ? t.flag.e.c : t.flag.s[Math.floor(t.flag.s.length/2)]; }
+
+/* ============================== ESCENARIOS ==============================
+   (b) 5 escenarios que rotan ronda a ronda. Elementos:
+   floor (barrera), spinner (molinete ± cubeta), bumper (tope elástico),
+   piston (plataforma que sube y baja), pendulum (péndulo que barre),
+   gap (agujero marcado en el piso), warp (portal que devuelve al inicio) */
+const SCENARIOS = [
+ { name:"Molinete Clásico",
+   els:[
+     {k:'floor', x:235,y:510,w:380,h:16,a:0.14, c:'y'},
+     {k:'spinner', x:560,y:500,r:126,blades:3,speed:0.052, bowl:true},
+     {k:'floor', x:900,y:545,w:400,h:16,a:0, c:'r'},
+   ]},
+ { name:"Doble Molinete y Pistón",
+   els:[
+     {k:'floor', x:235,y:510,w:380,h:16,a:0.14, c:'y'},
+     {k:'spinner', x:560,y:500,r:126,blades:3,speed:0.052, bowl:true},
+     {k:'floor', x:900,y:545,w:400,h:16,a:0, c:'r'},
+     {k:'spinner', x:950,y:330,r:70,blades:2,speed:-0.09},
+     {k:'piston', x:840,y0:432,y1:524,w:92,h:14,period:1600,phase:0},
+   ]},
+ { name:"Bumpers de Feria",
+   els:[
+     {k:'floor', x:180,y:470,w:300,h:16,a:0.18, c:'y'},
+     {k:'spinner', x:430,y:468,r:62,blades:3,speed:0.09},
+     {k:'floor', x:720,y:545,w:780,h:16,a:0, c:'r'},
+     {k:'bumper', x:600,y:400,r:23},
+     {k:'bumper', x:745,y:325,r:23},
+     {k:'bumper', x:885,y:415,r:23},
+     {k:'bumper', x:700,y:490,r:19},
+   ]},
+ { name:"Péndulo del Caos",
+   els:[
+     {k:'floor', x:235,y:510,w:380,h:16,a:0.14, c:'y'},
+     {k:'spinner', x:560,y:500,r:126,blades:3,speed:0.055, bowl:true},
+     {k:'floor', x:900,y:545,w:400,h:16,a:0, c:'r'},
+     {k:'pendulum', px:945,py:225,len:235,amp:0.85,period:2300},
+   ]},
+ { name:"Campo de Agujeros",
+   els:[
+     {k:'floor', x:235,y:510,w:380,h:16,a:0.14, c:'y'},
+     {k:'spinner', x:560,y:500,r:126,blades:3,speed:0.055, bowl:true},
+     {k:'floor', x:782,y:545,w:155,h:16,a:0, c:'r'},
+     {k:'gap',   x0:860,x1:920,y:545},
+     {k:'floor', x:980,y:545,w:120,h:16,a:0, c:'r'},
+     {k:'gap',   x0:1040,x1:1095,y:545},
+     {k:'warp',  x:890,y:645,r:26},
+   ]},
+];
+
+/* ============================== ESTADO ============================== */
+let engine, keeper, goalSensor;
+let spinners=[], pistons=[], pendulums=[];
+let scn = SCENARIOS[0];
+let balls = [];
+let running = false;
+let spawnTimer = 0, lastTime = 0;
+let mouseY = null, lastMouseMove = -1e9, autoPhase = 0;
+let confetti = [];
+
+let groupsState = [];
+let flow = { stage:'idle', gi:0, round:0, mi:0 };
+let bracketRounds = [];
+let thirdsRank = [];
+let session = null;
+
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+cv.width = W * DPR; cv.height = H * DPR;
+ctx.scale(DPR, DPR);
+
+/* ========================= GEOMETRÍA COMÚN ========================= */
+const GEO = {
+  ramp:      { x:560, y:282, w:470, h:14, a:-0.17 },
+  rampWallR: { x:800, y:200, w:14,  h:170, a:0 },
+  triangle:  { x:302, y:428, w:170, h:14, a:0.62 },
+  apron:     { x:1182,y:545, w:172, h:16, a:0 },          // piso rojo frente al arco (siempre)
+  goal: { mouthX:1176, backX:1252, top:307, bottom:537 },
+  keeper: { x:1168, w:13, h:92, minY:359, maxY:490 },
+  spawn: { x0:430, x1:720, y:52 },
+};
+
+/* ============================== FÍSICA ============================== */
+function buildWorld(){
+  engine = Engine.create();
+  engine.gravity.y = 1;
+  const world = engine.world;
+  spinners=[]; pistons=[]; pendulums=[];
+  const S = (g, opts={}) => Bodies.rectangle(g.x, g.y, g.w, g.h, { isStatic:true, angle:g.a||0, friction:0.05, restitution:0.6, ...opts });
+
+  const statics = [
+    Bodies.rectangle(W/2, -24, W+200, 50, {isStatic:true, restitution:0.6}),
+    Bodies.rectangle(-24, H/2, 50, H+200, {isStatic:true, restitution:0.6}),
+    Bodies.rectangle(W+24, H/2, 50, H+200, {isStatic:true, restitution:0.6}),
+    S(GEO.ramp,{restitution:0.5}), S(GEO.rampWallR), S(GEO.triangle),
+    S(GEO.apron,{restitution:0.65}),
+    Bodies.rectangle(GEO.goal.backX, (GEO.goal.top+GEO.goal.bottom)/2, 16, GEO.goal.bottom-GEO.goal.top, {isStatic:true, restitution:0.1}),
+    Bodies.rectangle((GEO.goal.mouthX+GEO.goal.backX)/2, GEO.goal.top, GEO.goal.backX-GEO.goal.mouthX+20, 12, {isStatic:true}),
+    Bodies.rectangle(1268, (GEO.goal.top+GEO.goal.bottom)/2, 28, GEO.goal.bottom-GEO.goal.top, {isStatic:true}),
+  ];
+
+  // elementos del escenario actual
+  for(const el of scn.els){
+    if(el.k==='floor'){
+      statics.push(S(el, {restitution:0.65}));
+    }
+    else if(el.k==='spinner'){
+      if(el.bowl){
+        const R = el.r+24, a0=168*Math.PI/180, a1=12*Math.PI/180, N=9;
+        for(let i=0;i<N;i++){
+          const t0=a0+(a1-a0)*i/N, t1=a0+(a1-a0)*(i+1)/N;
+          const p0={x:el.x+R*Math.cos(t0), y:el.y+R*Math.sin(t0)};
+          const p1={x:el.x+R*Math.cos(t1), y:el.y+R*Math.sin(t1)};
+          statics.push(Bodies.rectangle((p0.x+p1.x)/2,(p0.y+p1.y)/2, Math.hypot(p1.x-p0.x,p1.y-p0.y)+8, 14,
+            {isStatic:true, angle:Math.atan2(p1.y-p0.y,p1.x-p0.x), friction:0.02, restitution:0.4}));
+        }
+      }
+      const parts=[];
+      for(let i=0;i<el.blades;i++) parts.push(Bodies.rectangle(el.x, el.y, el.r*2, 13, {angle:i*Math.PI/el.blades}));
+      const body = Body.create({parts, friction:0.1, restitution:0.7, frictionAir:0});
+      Body.setMass(body, 220);
+      Body.setPosition(body, {x:el.x, y:el.y});
+      Composite.add(world, body);
+      Composite.add(world, Constraint.create({pointA:{x:el.x,y:el.y}, bodyB:body, pointB:{x:0,y:0}, stiffness:1, length:0}));
+      spinners.push({body, cfg:el});
+    }
+    else if(el.k==='bumper'){
+      statics.push(Bodies.circle(el.x, el.y, el.r, {isStatic:true, restitution:1.25, label:"BUMPER"}));
+    }
+    else if(el.k==='piston'){
+      const b = Bodies.rectangle(el.x, el.y0, el.w, el.h, {isStatic:true, restitution:0.9});
+      Composite.add(world, b);
+      pistons.push({body:b, cfg:el});
+    }
+    else if(el.k==='pendulum'){
+      const th = Math.PI/2;
+      const b = Bodies.rectangle(el.px + (el.len/2)*Math.cos(th), el.py + (el.len/2)*Math.sin(th), el.len, 16,
+        {isStatic:true, angle:th, restitution:0.95});
+      Composite.add(world, b);
+      pendulums.push({body:b, cfg:el});
+    }
+    else if(el.k==='warp'){
+      Composite.add(world, Bodies.circle(el.x, el.y, el.r, {isStatic:true, isSensor:true, label:"WARP"}));
+    }
+    /* 'gap' es solo dibujo: el agujero es la ausencia de piso */
+  }
+  Composite.add(world, statics);
+
+  goalSensor = Bodies.rectangle(GEO.goal.backX-32, (GEO.goal.top+GEO.goal.bottom)/2, 30, GEO.goal.bottom-GEO.goal.top-20,
+    {isStatic:true, isSensor:true, label:"GOAL"});
+  Composite.add(world, goalSensor);
+
+  keeper = Bodies.rectangle(GEO.keeper.x, (GEO.keeper.minY+GEO.keeper.maxY)/2, GEO.keeper.w, GEO.keeper.h,
+    {isStatic:true, restitution:1.0, label:"KEEPER"});
+  Composite.add(world, keeper);
+
+  Events.on(engine, "collisionStart", ev=>{
+    for(const p of ev.pairs){
+      const a=p.bodyA, b=p.bodyB;
+      const lab = x => x.label==="GOAL"||x.label==="WARP" ? x.label : null;
+      const sl = lab(a)||lab(b);
+      if(!sl) continue;
+      const ballBody = lab(a) ? b : a;
+      const rec = balls.find(x=>x.body===ballBody);
+      if(!rec) continue;
+      if(sl==="GOAL" && !rec.scored) onGoal(rec);
+      else if(sl==="WARP") warpBall(rec);
+    }
+  });
+}
+
+function warpBall(rec){
+  const now = performance.now();
+  if(rec.warpAt && now-rec.warpAt < 900) return;
+  rec.warpAt = now;
+  burst(rec.body.position.x, rec.body.position.y, "#8848b0");
+  const x = GEO.spawn.x0 + Math.random()*(GEO.spawn.x1-GEO.spawn.x0);
+  Body.setPosition(rec.body, {x, y:GEO.spawn.y});
+  Body.setVelocity(rec.body, {x:0, y:0});
+}
+
+function spawnBall(){
+  if(!session) return;
+  const active = session.teams.filter(t=>!t.done);
+  if(!active.length || balls.length>=MAX_BALLS) return;
+  const team = active[(Math.random()*active.length)|0];
+  const x = GEO.spawn.x0 + Math.random()*(GEO.spawn.x1-GEO.spawn.x0);
+  const body = Bodies.circle(x, GEO.spawn.y, BALL_R, { restitution:BALL_REST, friction:0.006, frictionAir:0.0012, density:0.0016 });
+  Body.setVelocity(body,{x:(Math.random()-0.5)*1.5, y:0});
+  Composite.add(engine.world, body);
+  balls.push({ body, team, scored:false, slowSince:null });
+}
+function removeBall(rec){ Composite.remove(engine.world, rec.body); balls = balls.filter(b=>b!==rec); }
+function clearBalls(){ [...balls].forEach(removeBall); }
+
+/* ============================== TORNEO ============================== */
+function startTournament(){
+  groupsState = GROUPS_DEF.map(g=>({
+    letter:g.letter,
+    teams:g.teams.map(t=>({name:t.name, flag:t.flag, css:flagCSS(t.flag), goals:0, done:false})),
+    result:null, thirdTime:0
+  }));
+  bracketRounds = []; thirdsRank = [];
+  flow = { stage:'groups', gi:0, round:0, mi:0 };
+  document.getElementById("logItems").innerHTML = "";
+  document.getElementById("startOverlay").classList.add("hidden");
+  document.getElementById("endOverlay").classList.add("hidden");
+  startGroupSession();
+}
+
+function pickScenario(i){ scn = SCENARIOS[i % SCENARIOS.length]; }
+
+function startGroupSession(){
+  pickScenario(flow.gi);
+  const g = groupsState[flow.gi];
+  g.teams.forEach(t=>{ t.goals=0; t.done=false; });
+  session = { type:'group', teams:g.teams, target:GOALS_GROUP, order:[], t0:performance.now() };
+  beginSession("Grupo " + g.letter, "Fase de grupos · Grupo " + (flow.gi+1) + "/12",
+    "Clasifican los 3 primeros en llegar a " + GOALS_GROUP + " goles");
+}
+
+function startDuelSession(){
+  pickScenario(flow.round*3 + flow.mi + 2);
+  const mArr = bracketRounds[flow.round];
+  const match = mArr[flow.mi];
+  [match.a, match.b].forEach(t=>{ t.goals=0; t.done=false; });
+  session = { type:'duel', teams:[match.a, match.b], target:GOALS_KO, order:[], t0:performance.now(), match };
+  beginSession(match.a.name + " vs " + match.b.name,
+    roundName(mArr.length) + " · Partido " + (flow.mi+1) + "/" + mArr.length,
+    "Gana el primero en llegar a " + GOALS_KO + " goles");
+}
+
+function beginSession(title, phase, rule){
+  if(engine) clearBalls();
+  buildWorld();
+  balls = []; confetti = [];
+  document.getElementById("sessionTitle").textContent = title;
+  document.getElementById("phaseTag").textContent = phase;
+  document.getElementById("ruleTxt").textContent = rule;
+  document.getElementById("scnTag").innerHTML = "&#127922; Escenario: <b>" + scn.name + "</b>";
+  renderScore();
+  running = true; spawnTimer = 0; lastTime = performance.now();
+  announce("\u26BD " + title + " · " + scn.name, 2200);
+}
+
+function roundName(n){
+  return {16:"16avos de final", 8:"Octavos de final", 4:"Cuartos de final", 2:"Semifinales", 1:"GRAN FINAL"}[n] || "Llave";
+}
+
+function onGoal(rec){
+  rec.scored = true;
+  const t = rec.team;
+  if(session && !t.done){
+    t.goals++;
+    burst(rec.body.position.x, rec.body.position.y, teamColor(t));
+    if(t.goals >= session.target){
+      t.done = true;
+      session.order.push(t);
+      balls.filter(b=>b.team===t && !b.scored).forEach(removeBall);
+      if(session.type==='group'){
+        const pos = session.order.length;
+        announce("\u2705 ¡" + t.name + " clasifica " + pos + "º!", 2400);
+        if(pos===3) finishGroup();
+      } else {
+        announce("\u{1F3C6} ¡" + t.name + " gana la llave!", 2600);
+        finishDuel(t);
+      }
+    } else {
+      announce("\u26BD ¡Gol de " + t.name + "! (" + t.goals + "/" + session.target + ")", 1300);
+    }
+    renderScore();
+  }
+  setTimeout(()=>{ if(balls.includes(rec)) removeBall(rec); }, 350);
+}
+
+function finishGroup(fromSim){
+  running = false;
+  const g = groupsState[flow.gi];
+  const fourth = g.teams.find(t=>!session.order.includes(t));
+  g.result = [...session.order, fourth];
+  g.thirdTime = fromSim ? (40000 + Math.random()*80000) : (performance.now() - session.t0);
+  addLog("Grupo " + g.letter + ": 1º " + g.result[0].name + " · 2º " + g.result[1].name + " · 3º " + g.result[2].name + " · <s>" + g.result[3].name + "</s>");
+  const secs = (g.thirdTime/1000).toFixed(1);
+  showMid("Grupo " + g.letter + " completado",
+    ["1º " + chip(g.result[0]), "2º " + chip(g.result[1]),
+     "3º " + chip(g.result[2]) + " <small>(cerró el grupo en " + secs + " s → cuenta para mejores terceros)</small>",
+     "&#10060; Eliminado: " + chip(g.result[3])].join("<br>"));
+}
+
+function finishDuel(winner, simScore){
+  running = false;
+  const m = session.match;
+  m.winner = winner;
+  const loser = m.a===winner ? m.b : m.a;
+  const score = simScore || [m.a.goals, m.b.goals];
+  m.score = score;
+  const rn = roundName(bracketRounds[flow.round].length);
+  addLog(rn + ": " + m.a.name + " " + score[0] + "–" + score[1] + " " + m.b.name);
+  if(bracketRounds[flow.round].length===1){
+    showEnd("\u{1F3C6} ¡" + winner.name + " CAMPEÓN DEL MUNDO!",
+      chip(winner) + " venció en la final a " + chip(loser) + " por <b>" + score[0] + "–" + score[1] + "</b>." +
+      "<br><br>" + fullPath(winner));
+    flow.stage='done';
+  } else {
+    showMid(rn + " — Resultado",
+      chip(m.a) + " <b>" + score[0] + "</b> – <b>" + score[1] + "</b> " + chip(m.b) +
+      "<br>Avanza: " + chip(winner));
+  }
+}
+
+function fullPath(t){
+  let s = "<b>Camino del campeón:</b><br>";
+  for(const r of bracketRounds){
+    const m = r.find(x=>x.a===t||x.b===t);
+    if(m && m.winner) s += roundName(r.length) + ": " + m.a.name + " " + m.score[0] + "–" + m.score[1] + " " + m.b.name + "<br>";
+  }
+  return s;
+}
+
+function nextStep(){
+  document.getElementById("midOverlay").classList.add("hidden");
+  if(flow.stage==='groups'){
+    flow.gi++;
+    if(flow.gi < 12) startGroupSession();
+    else showThirds();
+  }
+  else if(flow.stage==='thirds'){
+    buildBracket();
+    flow.stage='ko'; flow.round=0; flow.mi=0;
+    startDuelSession();
+  }
+  else if(flow.stage==='ko'){
+    flow.mi++;
+    const r = bracketRounds[flow.round];
+    if(flow.mi < r.length) startDuelSession();
+    else {
+      const winners = r.map(m=>m.winner);
+      const next = [];
+      for(let i=0;i<winners.length;i+=2) next.push({a:winners[i], b:winners[i+1], winner:null, score:null});
+      bracketRounds.push(next);
+      flow.round++; flow.mi=0;
+      startDuelSession();
+    }
+  }
+}
+
+function showThirds(){
+  flow.stage='thirds';
+  thirdsRank = groupsState.map(g=>({team:g.result[2], time:g.thirdTime, letter:g.letter}))
+    .sort((a,b)=>a.time-b.time);
+  let html = "<table class='mini'>";
+  thirdsRank.forEach((x,i)=>{
+    const inn = i<8;
+    html += "<tr style='" + (inn?"":"opacity:.45;text-decoration:line-through;") + "'><td>" + (i+1) + "º</td><td>" + chip(x.team) +
+      " (Grupo " + x.letter + ")</td><td>" + (x.time/1000).toFixed(1) + " s</td><td>" + (inn?"&#9989; avanza":"eliminado") + "</td></tr>";
+  });
+  html += "</table><small>Los 8 terceros más rápidos completan los 32 clasificados.</small>";
+  showMid("Mejores terceros", html);
+}
+
+function buildBracket(){
+  const winners = groupsState.map(g=>g.result[0]);
+  const runners = groupsState.map(g=>g.result[1]);
+  const thirds  = thirdsRank.slice(0,8).map(x=>x.team);
+  const seeds = [...winners, ...runners, ...thirds];
+  const r32 = [];
+  for(let i=0;i<16;i++) r32.push({a:seeds[i], b:seeds[31-i], winner:null, score:null});
+  bracketRounds = [r32];
+  addLog("&#127967;&#65039; Comienzan los 16avos de final (32 equipos)");
+}
+
+document.getElementById("simBtn").onclick = ()=>{
+  if(!running || !session) return;
+  running = false; clearBalls();
+  if(session.type==='group'){
+    const pool = [...session.teams].sort(()=>Math.random()-0.5);
+    session.order = pool.slice(0,3);
+    session.order.forEach(t=>t.done=true);
+    finishGroup(true);
+  } else {
+    const m = session.match;
+    const winner = Math.random()<0.5 ? m.a : m.b;
+    const ls = (Math.random()*GOALS_KO)|0;
+    finishDuel(winner, m.a===winner ? [GOALS_KO, ls] : [ls, GOALS_KO]);
+  }
+};
+
+/* ============================== UI helpers ============================== */
+function chip(t){ return "<span class='dot' style='background:" + t.css + "'></span><b>" + t.name + "</b>"; }
+function addLog(html){
+  const el = document.getElementById("logItems");
+  el.innerHTML = "&#8226; " + html + "<br>" + el.innerHTML;
+}
+function showMid(title, body){
+  document.getElementById("midTitle").innerHTML = title;
+  document.getElementById("midBody").innerHTML = body;
+  setTimeout(()=>document.getElementById("midOverlay").classList.remove("hidden"), 900);
+}
+function showEnd(title, body){
+  document.getElementById("endTitle").innerHTML = title;
+  document.getElementById("endBody").innerHTML = body;
+  setTimeout(()=>document.getElementById("endOverlay").classList.remove("hidden"), 1200);
+}
+function renderScore(){
+  const rows = document.getElementById("rows");
+  const mini = document.getElementById("sbMini");
+  if(!session){ rows.innerHTML=""; mini.innerHTML=""; return; }
+  mini.innerHTML = session.teams.map(t=>
+    "<span class='mi" + (t.done?" q":"") + "'><span class='dot' style='background:" + t.css + "'></span><b>" +
+    t.goals + "/" + session.target + "</b></span>").join("");
+  rows.innerHTML = session.teams.map(t=>{
+    const pos = session.order.indexOf(t);
+    return "<div class='teamRow " + (t.done?'qualified':'') + "'>" +
+      "<span class='dot' style='background:" + t.css + "'></span>" +
+      "<span>" + t.name + ": <b>" + t.goals + "/" + session.target + "</b>" +
+      (pos>=0 ? " &#9989;" + (session.type==='group' ? " "+(pos+1)+"º" : "") : "") + "</span></div>";
+  }).join("");
+}
+function buildGroupsGrid(){
+  const el = document.getElementById("groupsGrid");
+  el.innerHTML = GROUPS_DEF.map(g=>
+    "<div><b>Grupo " + g.letter + ":</b> " + g.teams.map(t=>t.name).join(" · ") + "</div>").join("");
+}
+
+let bannerTO=null;
+function announce(msg, ms){
+  const el = document.getElementById("banner");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(bannerTO);
+  bannerTO = setTimeout(()=>el.classList.remove("show"), ms);
+}
+
+/* ----- móvil: paneles discretos ----- */
+const mqMobile = window.matchMedia("(max-width:820px), (max-height:520px)");
+function applyMobileDefaults(){
+  if(mqMobile.matches){
+    document.getElementById("scoreboard").classList.add("collapsed");
+    document.getElementById("hint").textContent = "\u{1F446} Deslizá el dedo sobre el campo para mover al arquero. Tocá el marcador para expandirlo.";
+  }
+}
+applyMobileDefaults();
+document.getElementById("sbHead").onclick = ()=>document.getElementById("scoreboard").classList.toggle("collapsed");
+document.getElementById("logToggle").onclick = ()=>document.getElementById("log").classList.toggle("show");
+
+document.getElementById("startBtn").onclick = startTournament;
+document.getElementById("midBtn").onclick = nextStep;
+document.getElementById("restartBtn").onclick = ()=>{
+  document.getElementById("endOverlay").classList.add("hidden");
+  document.getElementById("startOverlay").classList.remove("hidden");
+};
+
+cv.addEventListener("mousemove", e=>{
+  const r = cv.getBoundingClientRect();
+  mouseY = (e.clientY - r.top) * (H / r.height);
+  lastMouseMove = performance.now();
+});
+cv.addEventListener("touchmove", e=>{
+  const r = cv.getBoundingClientRect();
+  mouseY = (e.touches[0].clientY - r.top) * (H / r.height);
+  lastMouseMove = performance.now();
+  e.preventDefault();
+},{passive:false});
+
+/* ============================== LOOP ============================== */
+function step(now){
+  requestAnimationFrame(step);
+  const dt = Math.min(now - lastTime, 40);
+  lastTime = now;
+
+  if(running && engine){
+    // molinetes
+    for(const s of spinners) Body.setAngularVelocity(s.body, s.cfg.speed);
+    // pistones (suben y bajan)
+    for(const p of pistons){
+      const c=p.cfg;
+      const y = c.y0 + (c.y1-c.y0)*(0.5+0.5*Math.sin(now*2*Math.PI/c.period + (c.phase||0)));
+      Body.setPosition(p.body, {x:c.x, y});
+    }
+    // péndulos (barren el campo)
+    for(const p of pendulums){
+      const c=p.cfg;
+      const th = Math.PI/2 + c.amp*Math.sin(now*2*Math.PI/c.period);
+      Body.setPosition(p.body, {x:c.px + (c.len/2)*Math.cos(th), y:c.py + (c.len/2)*Math.sin(th)});
+      Body.setAngle(p.body, th);
+    }
+
+    // arquero rápido
+    let targetY;
+    if(now - lastMouseMove < 2500 && mouseY !== null) targetY = mouseY;
+    else { autoPhase += dt * 0.0034; targetY = (GEO.keeper.minY+GEO.keeper.maxY)/2 + Math.sin(autoPhase)*((GEO.keeper.maxY-GEO.keeper.minY)/2); }
+    targetY = Math.max(GEO.keeper.minY, Math.min(GEO.keeper.maxY, targetY));
+    const ky = keeper.position.y + (targetY - keeper.position.y)*0.55;
+    Body.setPosition(keeper, {x:GEO.keeper.x, y:ky});
+
+    spawnTimer += dt;
+    if(spawnTimer > SPAWN_MS){ spawnTimer = 0; spawnBall(); }
+
+    Engine.update(engine, dt);
+
+    for(const rec of [...balls]){
+      const b = rec.body;
+      if(b.position.y > H+80 || b.position.x < -60){ removeBall(rec); continue; }
+      // tope de velocidad (los bumpers son muy elásticos)
+      const sp = Math.hypot(b.velocity.x, b.velocity.y);
+      if(sp > MAX_SPEED) Body.setVelocity(b, {x:b.velocity.x*MAX_SPEED/sp, y:b.velocity.y*MAX_SPEED/sp});
+      if(sp < 0.18){ rec.slowSince ??= now; if(now - rec.slowSince > 7000) removeBall(rec); }
+      else rec.slowSince = null;
+    }
+  }
+  draw(now);
+}
+
+/* ============================== DIBUJO ============================== */
+const INK = "#2b3ab0";
+const HL = { y:"rgba(255,223,61,.85)", r:"rgba(227,74,58,.82)" };
+
+function draw(now){
+  ctx.clearRect(0,0,W,H);
+  paper();
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+
+  inkRect(GEO.ramp); inkRect(GEO.rampWallR); inkRect(GEO.triangle);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(238,378); ctx.lineTo(238,478); ctx.lineTo(362,478); ctx.closePath(); ctx.stroke();
+
+  highlighter(GEO.apron, HL.r); inkRect(GEO.apron, 2);
+
+  // elementos del escenario
+  for(const el of scn.els){
+    if(el.k==='floor'){ highlighter(el, HL[el.c]||HL.r); inkRect(el, 2); }
+    else if(el.k==='spinner') drawSpinner(el);
+    else if(el.k==='bumper') drawBumper(el);
+    else if(el.k==='gap') drawGap(el);
+    else if(el.k==='warp') drawWarp(el, now);
+  }
+  for(const p of pistons) drawPiston(p);
+  for(const p of pendulums) drawPendulum(p);
+
+  drawGoal();
+
+  const k = keeper ? keeper.position : {x:GEO.keeper.x, y:(GEO.keeper.minY+GEO.keeper.maxY)/2};
+  ctx.fillStyle = "#fffdf6"; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+  rr(k.x-GEO.keeper.w/2, k.y-GEO.keeper.h/2, GEO.keeper.w, GEO.keeper.h, 6, true, true);
+
+  for(const rec of balls) drawBall(rec);
+  drawConfetti(now);
+}
+
+function paper(){
+  ctx.fillStyle = "#f7f5ee"; ctx.fillRect(0,0,W,H);
+  const g = ctx.createLinearGradient(0,H-90,0,H);
+  g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,"rgba(90,80,60,.10)");
+  ctx.fillStyle = g; ctx.fillRect(0,H-90,W,90);
+}
+function withRot(gdef, fn){ ctx.save(); ctx.translate(gdef.x, gdef.y); ctx.rotate(gdef.a||0); fn(gdef); ctx.restore(); }
+function inkRect(g, lw=3){ withRot(g, gg=>{ ctx.strokeStyle=INK; ctx.lineWidth=lw; ctx.strokeRect(-gg.w/2,-gg.h/2,gg.w,gg.h); }); }
+function highlighter(g, color){ withRot(g, gg=>{ ctx.fillStyle=color; ctx.fillRect(-gg.w/2-6,-gg.h/2-4,gg.w+12,gg.h+8); }); }
+function rr(x,y,w,h,r,fill,stroke){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  if(fill) ctx.fill(); if(stroke) ctx.stroke();
+}
+
+function drawSpinner(el){
+  if(el.bowl){
+    ctx.strokeStyle=INK; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(el.x, el.y, el.r+24, 12*Math.PI/180, 168*Math.PI/180); ctx.stroke();
+  }
+  const sp = spinners.find(s=>s.cfg===el);
+  const ang = sp ? sp.body.angle : 0;
+  ctx.save(); ctx.translate(el.x, el.y); ctx.rotate(ang);
+  ctx.strokeStyle=INK; ctx.lineWidth=13;
+  for(let i=0;i<el.blades;i++){
+    ctx.save(); ctx.rotate(i*Math.PI/el.blades);
+    ctx.beginPath(); ctx.moveTo(-el.r,0); ctx.lineTo(el.r,0); ctx.stroke();
+    ctx.fillStyle=INK;
+    ctx.beginPath(); ctx.arc(el.r,0,7,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-el.r,0,7,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(el.x,el.y,7,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(el.x,el.y,3,0,Math.PI*2); ctx.stroke();
+}
+function drawBumper(el){
+  ctx.fillStyle = "rgba(255,223,61,.85)";
+  ctx.beginPath(); ctx.arc(el.x,el.y,el.r,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(el.x,el.y,el.r,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(el.x,el.y,el.r*0.45,0,Math.PI*2); ctx.stroke();
+}
+function drawPiston(p){
+  const c=p.cfg, pos=p.body.position;
+  ctx.setLineDash([5,7]); ctx.strokeStyle="rgba(43,58,176,.4)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(c.x, c.y0-10); ctx.lineTo(c.x, c.y1+10); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle="rgba(227,74,58,.82)";
+  ctx.fillRect(pos.x-c.w/2-4, pos.y-c.h/2-3, c.w+8, c.h+6);
+  ctx.strokeStyle=INK; ctx.lineWidth=2.5;
+  ctx.strokeRect(pos.x-c.w/2, pos.y-c.h/2, c.w, c.h);
+}
+function drawPendulum(p){
+  const c=p.cfg, pos=p.body.position, th=p.body.angle;
+  const tipX = c.px + c.len*Math.cos(th), tipY = c.py + c.len*Math.sin(th);
+  ctx.strokeStyle=INK; ctx.lineWidth=6;
+  ctx.beginPath(); ctx.moveTo(c.px, c.py); ctx.lineTo(tipX, tipY); ctx.stroke();
+  ctx.fillStyle="rgba(227,74,58,.85)";
+  ctx.beginPath(); ctx.arc(tipX, tipY, 15, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(tipX, tipY, 15, 0, Math.PI*2); ctx.stroke();
+  ctx.fillStyle=INK;
+  ctx.beginPath(); ctx.arc(c.px, c.py, 6, 0, Math.PI*2); ctx.fill();
+}
+function drawGap(el){
+  const y = el.y;
+  ctx.strokeStyle="rgba(227,74,58,.9)"; ctx.lineWidth=3;
+  for(let x=el.x0+4; x<el.x1-2; x+=12){
+    ctx.beginPath(); ctx.moveTo(x, y-6); ctx.lineTo(x+8, y+10); ctx.stroke();
+  }
+  ctx.setLineDash([4,5]); ctx.strokeStyle=INK; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(el.x0, y-8); ctx.lineTo(el.x0, y+30); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(el.x1, y-8); ctx.lineTo(el.x1, y+30); ctx.stroke();
+  ctx.setLineDash([]);
+}
+function drawWarp(el, now){
+  ctx.save(); ctx.translate(el.x, el.y); ctx.rotate(now*0.002);
+  ctx.strokeStyle="#8848b0"; ctx.lineWidth=3;
+  for(let i=0;i<3;i++){
+    ctx.beginPath(); ctx.arc(0,0, el.r-2-i*7, i*2.1, i*2.1+4.2); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle="rgba(136,72,176,.5)"; ctx.lineWidth=2; ctx.setLineDash([4,5]);
+  ctx.beginPath(); ctx.arc(el.x, el.y, el.r+4, 0, Math.PI*2); ctx.stroke();
+  ctx.setLineDash([]);
+}
+function drawGoal(){
+  const g=GEO.goal;
+  ctx.strokeStyle=INK; ctx.lineWidth=3;
+  ctx.strokeRect(g.mouthX+18, g.top-6, g.backX-g.mouthX-10, g.bottom-g.top+8);
+  ctx.lineWidth=1.4; ctx.strokeStyle="rgba(43,58,176,.55)";
+  for(let x=g.mouthX+18; x<=g.backX+8; x+=16){ ctx.beginPath(); ctx.moveTo(x,g.top-6); ctx.lineTo(x,g.bottom+2); ctx.stroke(); }
+  for(let y=g.top-6; y<=g.bottom+2; y+=22){ ctx.beginPath(); ctx.moveTo(g.mouthX+18,y); ctx.lineTo(g.backX+8,y); ctx.stroke(); }
+}
+
+function drawBall(rec){
+  const b=rec.body, p=b.position, f=rec.team.flag;
+  const D=BALL_R*2;
+  ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(b.angle);
+  ctx.beginPath(); ctx.arc(0,0,BALL_R,0,Math.PI*2); ctx.clip();
+  if(f.t==='s'){ ctx.fillStyle=f.s[0]; ctx.fillRect(-BALL_R,-BALL_R,D,D); }
+  else{
+    const n=f.s.length;
+    for(let i=0;i<n;i++){
+      ctx.fillStyle=f.s[i];
+      if(f.t==='h') ctx.fillRect(-BALL_R, -BALL_R+i*D/n, D, D/n+0.6);
+      else          ctx.fillRect(-BALL_R+i*D/n, -BALL_R, D/n+0.6, D);
+    }
+  }
+  const e=f.e;
+  if(e){
+    if(e.k==='sun'){ ctx.fillStyle="#F6B40E"; ctx.beginPath(); ctx.arc(0,0,3.4,0,Math.PI*2); ctx.fill(); }
+    else if(e.k==='brasil'){
+      ctx.fillStyle="#FEDF00";
+      ctx.beginPath(); ctx.moveTo(0,-BALL_R+2.5); ctx.lineTo(BALL_R-2.5,0); ctx.lineTo(0,BALL_R-2.5); ctx.lineTo(-BALL_R+2.5,0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#002776"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+    }
+    else if(e.k==='circle'){ ctx.fillStyle=e.c; ctx.beginPath(); ctx.arc(0,0,4.5,0,Math.PI*2); ctx.fill(); }
+    else if(e.k==='cross'){ ctx.fillStyle=e.c; ctx.fillRect(-2.6,-BALL_R,5.2,D); ctx.fillRect(-BALL_R,-2.6,D,5.2); }
+    else if(e.k==='wedge'){ ctx.fillStyle=e.c; ctx.beginPath(); ctx.moveTo(-BALL_R,-BALL_R); ctx.lineTo(2,0); ctx.lineTo(-BALL_R,BALL_R); ctx.closePath(); ctx.fill(); }
+  }
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(p.x,p.y,BALL_R,0,Math.PI*2);
+  ctx.lineWidth=2.5; ctx.strokeStyle=INK; ctx.stroke();
+  ctx.beginPath(); ctx.arc(p.x-3.5,p.y-4.5,2.6,0,Math.PI*2);
+  ctx.fillStyle="rgba(255,255,255,.7)"; ctx.fill();
+}
+
+function burst(x,y,color){
+  for(let i=0;i<16;i++) confetti.push({x,y, vx:(Math.random()-0.5)*5, vy:-Math.random()*5-1, life:1, color});
+}
+function drawConfetti(){
+  for(const c of [...confetti]){
+    c.x+=c.vx; c.y+=c.vy; c.vy+=0.15; c.life-=0.022;
+    if(c.life<=0){ confetti.splice(confetti.indexOf(c),1); continue; }
+    ctx.globalAlpha=c.life; ctx.fillStyle=c.color; ctx.fillRect(c.x,c.y,5,5);
+  }
+  ctx.globalAlpha=1;
+}
+
+/* ============================== INIT ============================== */
+buildGroupsGrid();
+buildWorld();
+requestAnimationFrame(now=>{ lastTime=now; step(now); });
+</script>
+</body>
+</html>
